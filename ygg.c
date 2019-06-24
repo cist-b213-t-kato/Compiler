@@ -20,7 +20,10 @@ enum TokenType {
 };
 
 enum CommandType {
-	MOV
+	MOV,
+	LT,
+	ADD,
+	MUL
 };
 
 struct Token {
@@ -35,14 +38,75 @@ struct Node {
 };
 
 // 命令
-struct Command {
+typedef struct Command {
 	enum CommandType type;
-	*void data;
-};
+	void *data;
+} Command;
 
 struct Token *tokens[100];
 int tokensLength;
 int pos;
+
+typedef struct Stack {
+	void *data[100];
+	int rsp;
+	int rbp;
+} Stack;
+
+Stack *stack;
+
+void initStack() {
+	stack = (Stack *)malloc(sizeof(Stack));
+	stack->rsp = 0;
+	stack->rsp = 0;
+}
+
+void pushStack(void *d) {
+	stack->data[stack->rsp] = d;
+	stack->rsp++;
+}
+
+void *popStack() {
+	void *d;
+	d = stack->data[stack->rsp];
+	stack->rsp--;
+	return d;
+}
+
+Command *commands[100];
+int commandSize = 0;
+int flag;
+
+void addCommand(Command *command) {
+	commands[commandSize] = command;
+	commandSize++;
+}
+
+Command *createCommand(enum CommandType type) {
+	Command *command;
+	command = (Command *)malloc(sizeof(Command));
+	command->type = type;
+	return command;
+}
+
+void executeCommand(Command *command) {
+	long a;
+	long b;
+
+	if (command->type == LT) {
+		b = (int)popStack();
+		a = (int)popStack();
+		pushStack((void *)(a < b));
+	} else if (command->type == ADD) {
+		b = (int)popStack();
+		a = (int)popStack();
+		pushStack((void *)(a + b));
+	} else if (command->type == MUL) {
+		b = (int)popStack();
+		a = (int)popStack();
+		pushStack((void *)(a * b));
+	}
+}
 
 struct Token *NewToken(enum TokenType type, void* data) {
 	struct Token *tokenTmp;
@@ -427,9 +491,33 @@ int main(int argv, char *args[]) {
 	// 	i++;
 	// }
 
+	// addCommand(createCommand(LT));
 
+	// for (i = 0; i < commandSize; i++) {
+	// 	if (commands[i]->type == LT) {
+	// 		printf("LT\n");
+	// 	} else if (commands[i]->type == LT) {
+	// 		printf("LT\n");
+	// 	}
+	// }
 
+	initStack();
 
+	pushStack((void *)100);
+	pushStack((void *)200);
+	pushStack((void *)300);
+
+	printf("%d\n", (int)stack->data[0]);
+	printf("%d\n", (int)stack->data[1]);
+	printf("%d\n", (int)stack->data[2]);
+
+	addCommand(createCommand(ADD));
+	addCommand(createCommand(MUL));
+
+	executeCommand(commands[0]);
+	executeCommand(commands[1]);
+
+	printf("%d\n", (int)stack->data[0]);
 
 	fclose(fp);
 	
