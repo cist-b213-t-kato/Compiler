@@ -19,6 +19,13 @@ enum TokenType {
 	END
 };
 
+enum CommandType {
+	MOV,
+	LT,
+	ADD,
+	MUL
+};
+
 struct Token {
 	enum TokenType type;
 	void* data;
@@ -30,9 +37,76 @@ struct Node {
 	struct Node *right;
 };
 
+// 命令
+typedef struct Command {
+	enum CommandType type;
+	void *data;
+} Command;
+
 struct Token *tokens[100];
 int tokensLength;
 int pos;
+
+typedef struct Stack {
+	void *data[100];
+	int rsp;
+	int rbp;
+} Stack;
+
+Stack *stack;
+
+void initStack() {
+	stack = (Stack *)malloc(sizeof(Stack));
+	stack->rsp = 0;
+	stack->rsp = 0;
+}
+
+void pushStack(void *d) {
+	stack->data[stack->rsp] = d;
+	stack->rsp++;
+}
+
+void *popStack() {
+	void *d;
+	d = stack->data[stack->rsp];
+	stack->rsp--;
+	return d;
+}
+
+Command *commands[100];
+int commandSize = 0;
+int flag;
+
+void addCommand(Command *command) {
+	commands[commandSize] = command;
+	commandSize++;
+}
+
+Command *createCommand(enum CommandType type) {
+	Command *command;
+	command = (Command *)malloc(sizeof(Command));
+	command->type = type;
+	return command;
+}
+
+void executeCommand(Command *command) {
+	long a;
+	long b;
+
+	if (command->type == LT) {
+		b = (int)popStack();
+		a = (int)popStack();
+		pushStack((void *)(a < b));
+	} else if (command->type == ADD) {
+		b = (int)popStack();
+		a = (int)popStack();
+		pushStack((void *)(a + b));
+	} else if (command->type == MUL) {
+		b = (int)popStack();
+		a = (int)popStack();
+		pushStack((void *)(a * b));
+	}
+}
 
 struct Token *NewToken(enum TokenType type, void* data) {
 	struct Token *tokenTmp;
@@ -52,7 +126,6 @@ void tokenize(char *sArg) {
 			tokens[tokensLength] = NewToken(NUM, (void *)malloc(sizeof(int)));
 			*(int *)(tokens[tokensLength]->data) = strtol(s, &s, 10);
 			tokensLength++;
-			continue;
 		}
 
 		if (strncmp(s, "if", 2) == 0) {
@@ -151,9 +224,7 @@ struct Token *getToken(struct Node *node) {
 void printToken(struct Token *token) {
 	if (token->type == NUM) printf("NUM : %d", *(int *)(token->data));
 	if (token->type == ADD_OPE) printf("ADD_OPE");
-	if (token->type == SUB_OPE) printf("SUB_OPE");
 	if (token->type == MUL_OPE) printf("MUL_OPE");
-	if (token->type == DIV_OPE) printf("DIV_OPE");
 	if (token->type == IF) printf("IF");
 	if (token->type == ELSE) printf("ELSE");
 	if (token->type == BRACKET_START) printf("(");
@@ -191,10 +262,8 @@ struct Node *term() {
 		pos++;
 		return NewNode((void *)token, NULL, NULL);
 	} else {
-		// printf("hoge\n");
-		// printf("%d\n", token == NULL);
-		// printToken(token);
-		// printf("syntax error : not term.\n");
+		token = tokens[pos];
+		printf("syntax error : Not term.\n");
 		return NULL;
 	}
 }
@@ -203,12 +272,9 @@ struct Node *mul() {
 	struct Node *node = term();
 	struct Token *token;
 
-	// printToken(getToken(node));
-
 	while (1) {
-		if (consume(MUL_OPE) || consume(DIV_OPE)) {
+		if (consume(MUL_OPE)) {
 			token = tokens[pos];
-			// printToken(token);
 			pos++;
 			node = NewNode((void *)token, node, term());
 		} else {
@@ -230,7 +296,7 @@ struct Node *expr() {
 	node = mul();
 
 	while (1) {
-		if (consume(ADD_OPE) || consume(SUB_OPE)) {
+		if (consume(ADD_OPE)) {
 			token = tokens[pos];
 			pos++;
 			node = NewNode((void *)token, node, mul());
@@ -240,34 +306,33 @@ struct Node *expr() {
 	}
 }
 
-int calc(struct Node *node) {
+struct Node *calc(struct Node *node) {
 	enum TokenType type = ((struct Token *)node->data)->type;
-	int lResult;
-	int rResult;
+	struct Node *lResult;
+	struct Node *rResult;
+	struct Node *ret;
 	if (type == NUM) {
 		// return *(int *)((struct Token *)node->data)->data;
-		return *(int *)getToken(node)->data;
+		return NewNode(node->data, NULL, NULL);
 	} else {
-		// if (type == PRINT) {
-		// 	ret = calc(node->right);
-		// 	if (getToken(ret)->type == NUM) {
-		// 		printf("%d", *(int *)getToken(ret)->data);
-		// 	}
-		// 	// printf("hogehogehoge\n");
-		// 	return NULL;
-		// }
+		if (type == PRINT) {
+			ret = calc(node->right);
+			if (getToken(ret)->type == NUM) {
+				printf("%d", *(int *)getToken(ret)->data);
+			}
+			// printf("hogehogehoge\n");
+			return NULL;
+		}
 		lResult = calc(node->left);
 		rResult = calc(node->right);
-		if (type == ADD_OPE) {
-			return lResult + rResult;
-		} else if (type == SUB_OPE) {
-			return lResult - rResult;
-		} else if (type == MUL_OPE) {
-			return lResult * rResult;
-		} else if (type == DIV_OPE) {
-			return lResult / rResult;
+		if (type == MUL_OPE) {
+			*(int *)getToken(lResult)->data *= *(int *)getToken(rResult)->data;
+			return lResult;
+		} else if (type == ADD_OPE) {
+			*(int *)getToken(lResult)->data += *(int *)getToken(rResult)->data;
+			return lResult;
 		} else {
-			return 0;
+			return NULL;
 		}
 	}
 }
@@ -289,196 +354,81 @@ void skipBlock() {
 struct Node *stmt() {
 	struct Node *node;
 	struct Token *token;
-	// struct Node *ret;
+	struct Node *ret;
 
-	if (consume(PRINT)) {
-		token = tokens[pos];
+	// if (consume(PRINT)) {
+	// 	pos++;
+	// 	ret = calc(expr());
+	// 	if (((struct Token *)ret->data)->type == NUM) {
+	// 		printf("NUM : %d\n", *(int *)((struct Token *)ret->data)->data);
+	// 	}
+	// 	return NULL;
+	// }
+
+	if (consume(BLOCK_START)) {
 		pos++;
-		// ret = calc(expr());
-		// if (((struct Token *)ret->data)->type == NUM) {
-		// 	printf("NUM : %d\n", *(int *)((struct Token *)ret->data)->data);
-		// }
-		node = NewNode((void *)token, expr(), NULL);
-		// return NULL;
-		if (consume(END)) {
-			token = tokens[pos];
-			pos++;
-			// printToken(token);
-			return NewNode((void *)token, NULL, node);
+		while (!consume(BLOCK_END)) {
+			node = stmt();
+			if (node != NULL) {
+				calc(node);
+			}
 		}
+		pos++;
+		return NULL;
 	}
-
-	// if (consume(BLOCK_START)) {
-	// 	pos++;
-	// 	while (!consume(BLOCK_END)) {
-	// 		node = stmt();
-	// 		if (node != NULL) {
-	// 			calc(node);
-	// 		}
-	// 	}
-	// 	pos++;
-	// 	return NULL;
-	// }
-
-	// if (consume(IF)) {
-	// 	token = tokens[pos];
-	// 	pos++;
-
-	// 	if (!consume(BRACKET_START)) {
-	// 		printf("syntax error : Write a bracket after if.\n");
-	// 		exit(-1);
-	// 	}
-
-	// 	pos++;
-	// 	node = expr();
-
-	// 	if (consume(BRACKET_END)) {
-	// 		pos++;
-	// 	}
-
-	// 	ret = calc(node);
-
-	// 	node = stmt();
-
-	// 	if (*(int *)getToken(ret)->data != 0) {
-	// 		// else節を読み飛ばす
-	// 		if (consume(ELSE)) {
-	// 			pos++;
-	// 			if (consume(BLOCK_START)) {
-	// 				skipBlock();
-	// 				printToken(tokens[pos]);
-	// 			} else {
-	// 				// printToken(tokens[pos]);
-	// 				stmt();
-	// 			}
-	// 		}
-	// 		return node;
-	// 	} else {
-	// 		if (consume(ELSE)) {
-	// 			pos++;
-	// 			return stmt();
-	// 		}
-	// 	}
-	// 	return NULL;
-	// }
 
 	if (consume(IF)) {
 		token = tokens[pos];
 		pos++;
 
 		if (!consume(BRACKET_START)) {
-			printf("syntax error : Write '(' after if.\n");
+			printf("syntax error : Write a bracket after if.\n");
 			exit(-1);
 		}
+
 		pos++;
 		node = expr();
 
-		if (!consume(BRACKET_END)) {
-			printf("syntax error : Write ')' after expr.\n");
-			exit(-1);
-		}
-		pos++;
-
-		node = NewNode((void *)token, node, stmt());
-
-		if (consume(ELSE)) {
-			token = tokens[pos];
+		if (consume(BRACKET_END)) {
 			pos++;
-			node = NewNode((void *)token, node, stmt());
 		}
 
-		token = NewToken(END, NULL);
+		ret = calc(node);
 
-		node = NewNode((void *)token, NULL, node);
+		node = stmt();
 
-		return node;
+		if (*(int *)getToken(ret)->data != 0) {
+			// else節を読み飛ばす
+			if (consume(ELSE)) {
+				pos++;
+				if (consume(BLOCK_START)) {
+					skipBlock();
+					printToken(tokens[pos]);
+				} else {
+					// printToken(tokens[pos]);
+					stmt();
+				}
+			}
+			return node;
+		} else {
+			if (consume(ELSE)) {
+				pos++;
+				return stmt();
+			}
+		}
+		return NULL;
 	}
 
 	node = expr();
 
 	if (consume(END)) {
-		token = tokens[pos];
 		pos++;
-		// printToken(token);
-		return NewNode((void *)token, stmt(), node);
+		return node;
 	}
 
-	// printf("syntax error : Unknown syntax.\n");
+	printf("syntax error : Unknown syntax.\n");
 
 	return NULL;
-}
-
-struct Node *program() {
-	struct Node *child;
-	struct Node *parent;
-
-	child = stmt(); // A
-	while (pos < tokensLength) {
-		parent = stmt(); // B
-		parent->left = child; // B->left = A
-		child = parent; // A = B
-	}
-	return child;
-}
-
-int isExpr(struct Node *node) {
-	enum TokenType type = getToken(node)->type;
-	if (type == ADD_OPE || type == SUB_OPE
-			|| type == MUL_OPE || type == DIV_OPE
-			|| type == NUM) {
-		return 1;
-	}
-	return 0;
-}
-
-int execute(struct Node *node) {
-	int ret = 1;
-
-	if (getToken(node)->type == END) {
-		if (node->left != NULL) {
-			execute(node->left);
-		}
-
-		if (node->right != NULL) {
-			execute(node->right);
-		}
-	}
-
-	// ELSE_IF_THEN
-	if (getToken(node)->type == ELSE) {
-		if (getToken(node->left)->type == IF) {
-			ret = execute(node->left);
-		}
-		if (!ret && (node->right != NULL)) {
-			execute(node->right);
-		}
-		return !ret;
-	}
-
-	// IF_THEN
-	if (getToken(node)->type == IF) {
-		// printf("IF\n");
-		// printToken(getToken(node->left));
-		if (isExpr(node->left)) {
-			// printf("isExpr\n");
-			ret = calc(node->left);
-		}
-		if (ret && (node->right != NULL)) {
-			execute(node->right);
-		}	
-		return ret;
-	}
-
-	if (getToken(node)->type == PRINT) {
-		// printf("print\n");
-		// printToken(getToken(node->right->left));
-		if (isExpr(node->left)) {
-			ret = calc(node->left);
-			printf("%d\n", ret);
-		}
-	}
-
-	return 1;
 }
 
 int main(int argv, char *args[]) {
@@ -503,12 +453,8 @@ int main(int argv, char *args[]) {
 	}
 
 	iSize = 0;
-	// while (fscanf(fp, "%s\n", psBuf[iSize]) != EOF) {
-	// while (fscanf(fp, "%s", psBuf[iSize]) != EOF) {
-	while (fgets(psBuf[iSize], 256, fp) != NULL) {
-		if (strncmp(psBuf[iSize], "//", 2) == 0) {
-			strcpy(psBuf[iSize], "");
-		}
+	while (fscanf(fp, "%s\n", psBuf[iSize]) != EOF) {
+	// while (fgets(psBuf[iSize], 256, fp) != NULL) {
 		iSize++;
 	}
 
@@ -520,9 +466,9 @@ int main(int argv, char *args[]) {
 	// printf("%s\n", s);
 
 	tokenize(s);
-	
-	// printTokens();
-	// printf("----------\n");
+	printTokens();
+
+	printf("----------\n");
 
 	pos = 0;
 
@@ -545,11 +491,33 @@ int main(int argv, char *args[]) {
 	// 	i++;
 	// }
 
-	node = program();
-	// printf("%d\n", calc(node->right->left));
-	// printf("%d\n", calc(node->left->right->left));
-	execute(node);
-	// printToken(getToken(node));
+	// addCommand(createCommand(LT));
+
+	// for (i = 0; i < commandSize; i++) {
+	// 	if (commands[i]->type == LT) {
+	// 		printf("LT\n");
+	// 	} else if (commands[i]->type == LT) {
+	// 		printf("LT\n");
+	// 	}
+	// }
+
+	initStack();
+
+	pushStack((void *)100);
+	pushStack((void *)200);
+	pushStack((void *)300);
+
+	printf("%d\n", (int)stack->data[0]);
+	printf("%d\n", (int)stack->data[1]);
+	printf("%d\n", (int)stack->data[2]);
+
+	addCommand(createCommand(ADD));
+	addCommand(createCommand(MUL));
+
+	executeCommand(commands[0]);
+	executeCommand(commands[1]);
+
+	printf("%d\n", (int)stack->data[0]);
 
 	fclose(fp);
 	

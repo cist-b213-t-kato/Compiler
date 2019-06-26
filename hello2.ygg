@@ -1,0 +1,13 @@
+if (1) print 10 + 20 * 30;
+else print 12345;
+
+if (0) print 10 + 20 * 30;
+else print 12345;
+
+print 11111111;
+
+if (1) { 
+	print 10 + 20 * 30; 
+} else { 
+	print 12345;
+}
