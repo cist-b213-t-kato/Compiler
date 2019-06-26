@@ -1,7 +1,8 @@
 print 7;
 print 3 * 4 * 5;
 print 22 / 7;
-if (0)
+
+if (1)
  	print 777;
 else
  	print 37564;

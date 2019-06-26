@@ -387,6 +387,7 @@ struct Node *stmt() {
 			node = NewNode((void *)token, node, stmt());
 		}
 
+		// TODO 違うだろお？
 		token = NewToken(END, NULL);
 
 		node = NewNode((void *)token, NULL, node);
@@ -505,9 +506,13 @@ int main(int argv, char *args[]) {
 	iSize = 0;
 	// while (fscanf(fp, "%s\n", psBuf[iSize]) != EOF) {
 	// while (fscanf(fp, "%s", psBuf[iSize]) != EOF) {
+	// TODO これはひどい
 	while (fgets(psBuf[iSize], 256, fp) != NULL) {
-		if (strncmp(psBuf[iSize], "//", 2) == 0) {
-			strcpy(psBuf[iSize], "");
+		for (i = 0; i < 256 - 2; i++) { 
+			if (strncmp(psBuf[iSize] + i, "//", 2) == 0) {
+				strcpy(psBuf[iSize] + i, "");
+				break;
+			}
 		}
 		iSize++;
 	}
@@ -520,7 +525,7 @@ int main(int argv, char *args[]) {
 	// printf("%s\n", s);
 
 	tokenize(s);
-	
+
 	// printTokens();
 	// printf("----------\n");
 
