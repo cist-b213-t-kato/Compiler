@@ -9,11 +9,8 @@ enum TokenType {
 	SUB_OPE,
 	MUL_OPE,
 	DIV_OPE,
-	OPE_EQUAL,
-	TYPE,
 	IF,
 	ELSE,
-	IDENT,
 	BRACKET_START,
 	BRACKET_END,
 	BLOCK_START,
@@ -33,44 +30,9 @@ struct Node {
 	struct Node *right;
 };
 
-struct Map {
-	char *key[100];
-	void *value[100];
-	int size;
-};
-
 struct Token *tokens[100];
 int tokensLength;
 int pos;
-
-struct Map *map;
-
-
-struct Node *expr();
-
-void putMap(char *key, void *value) {
-	int i;
-	for (i = 0; i < map->size; i++) {
-		if (strcmp(map->key[i], key) == 0) {
-			map->value[i] = value;
-			return;
-		}
-	}
-	// map->key[map->size] = value;
-	map->key[map->size] = key;
-	map->value[map->size] = value;
-	map->size++;
-}
-
-void *getMap(char *key) {
-	int i;
-	for (i = 0; i < map->size; i++) {
-		if (strcmp(map->key[i], key) == 0) {
-			return map->value[i];
-		}
-	}
-	return NULL;
-}
 
 struct Token *NewToken(enum TokenType type, void* data) {
 	struct Token *tokenTmp;
@@ -83,8 +45,6 @@ struct Token *NewToken(enum TokenType type, void* data) {
 void tokenize(char *sArg) {
 	tokensLength = 0;
 	char *s;
-	char *buf;
-	int i;
 
 	s = sArg;
 	while (*s != '\0') {
@@ -122,36 +82,8 @@ void tokenize(char *sArg) {
 			}
 		}
 
-		if (strncmp(s, "int", 3) == 0) {
-			if (!isalnum(*( s + 3 ))) {
-				tokens[tokensLength] = NewToken(TYPE, "int");
-				tokensLength++;
-				s += 3;
-				continue;
-			}
-		}
-
-		if (strncmp(s, "char*", 5) == 0) {
-			if (!isalnum(*( s + 5 ))) {
-				tokens[tokensLength] = NewToken(TYPE, "char*");
-				tokensLength++;
-				s += 5;
-				continue;
-			}
-		}
-
-		// 識別子
 		if (isalpha(*s)) {
-			i = 1;
-			while (isalnum(*(s + i))) {
-				i++;
-			}
-			buf = (char *)malloc(sizeof(char) * i);
-			strncpy(buf, s, i);
-			tokens[tokensLength] = NewToken(IDENT, (void *)buf);
-			tokensLength++;
-			s += i;
-			continue;
+
 		}
 
 		if (*s == '{') {
@@ -171,11 +103,6 @@ void tokenize(char *sArg) {
 
 		if (*s == ')') {
 			tokens[tokensLength] = NewToken(BRACKET_END, NULL);
-			tokensLength++;
-		}
-
-		if (*s == '=') {
-			tokens[tokensLength] = NewToken(OPE_EQUAL, NULL);
 			tokensLength++;
 		}
 
@@ -222,14 +149,11 @@ struct Token *getToken(struct Node *node) {
 }
 
 void printToken(struct Token *token) {
-	printf("printToken: ");
 	if (token->type == NUM) printf("NUM : %d", *(int *)(token->data));
 	if (token->type == ADD_OPE) printf("ADD_OPE");
 	if (token->type == SUB_OPE) printf("SUB_OPE");
 	if (token->type == MUL_OPE) printf("MUL_OPE");
 	if (token->type == DIV_OPE) printf("DIV_OPE");
-	if (token->type == OPE_EQUAL) printf("OPE_EQUAL");
-	if (token->type == IDENT) printf("IDENT : %s", (char *)token->data);
 	if (token->type == IF) printf("IF");
 	if (token->type == ELSE) printf("ELSE");
 	if (token->type == BRACKET_START) printf("(");
@@ -259,25 +183,13 @@ int consume(enum TokenType type) {
 
 struct Node *term() {
 	struct Token *token;
-	struct Node *node;
 	
+	token = tokens[pos];
+	// printToken(token);
 
 	if (consume(NUM)) {
-		token = tokens[pos];
 		pos++;
 		return NewNode((void *)token, NULL, NULL);
-	} else if (consume(IDENT)) {
-		// printf("%s\n", "term_IDENT");
-		token = tokens[pos];
-		pos++;
-		node = NewNode((void *)token, NULL, NULL);
-		if (consume(OPE_EQUAL)) {
-			// printf("%s\n", "term_OPE_EQUAL");
-			token = tokens[pos];
-			pos++;
-			node = NewNode((void *)token, node, expr());
-		}
-		return node;
 	} else {
 		// printf("hoge\n");
 		// printf("%d\n", token == NULL);
@@ -335,18 +247,6 @@ int calc(struct Node *node) {
 	if (type == NUM) {
 		// return *(int *)((struct Token *)node->data)->data;
 		return *(int *)getToken(node)->data;
-	} else if (type == OPE_EQUAL) {
-		// printf("calc_OPE_EQUAL %s %d\n",
-		// 	getToken(node->left)->data, *(int *)getToken(node->right)->data);
-		putMap(getToken(node->left)->data, getToken(node->right)->data);
-		return *(int *)getToken(node->right)->data;
-	} else if (type == IDENT) {
-		// printf("calc_IDENT ");
-		// printf("%s ", (char *)getToken(node)->data);
-		// printf("%d\n", *(int *)getMap((char *)getToken(node)->data));
-		// printf("%d\n", getMap("abc"));
-		// return 1000;
-		return *(int *)getMap((char *)getToken(node)->data);
 	} else {
 		// if (type == PRINT) {
 		// 	ret = calc(node->right);
@@ -398,15 +298,13 @@ struct Node *stmt() {
 		// if (((struct Token *)ret->data)->type == NUM) {
 		// 	printf("NUM : %d\n", *(int *)((struct Token *)ret->data)->data);
 		// }
-		node = NewNode((void *)token, NULL, expr());
+		node = NewNode((void *)token, expr(), NULL);
 		// return NULL;
 		if (consume(END)) {
 			token = tokens[pos];
 			pos++;
 			// printToken(token);
 			return NewNode((void *)token, NULL, node);
-		} else {
-			printf("許されざる\n");
 		}
 	}
 
@@ -464,7 +362,6 @@ struct Node *stmt() {
 	// 	return NULL;
 	// }
 
-	// IF
 	if (consume(IF)) {
 		token = tokens[pos];
 		pos++;
@@ -498,33 +395,13 @@ struct Node *stmt() {
 		return node;
 	}
 
-	// 型宣言
-	if (consume(TYPE)) {
-		token = tokens[pos];
-		pos++;
-		node = NewNode((void *)token, NULL, NULL);
-		if(consume(IDENT)) {
-			token = tokens[pos];
-			pos++;
-			node->right = NewNode((void *)token, NULL, NULL);
-		}
-
-		if (consume(END)) {
-			token = tokens[pos];
-			pos++;
-			// printToken(token);
-			return NewNode((void *)token, NULL, node);
-		}
-	}
-
 	node = expr();
 
 	if (consume(END)) {
 		token = tokens[pos];
 		pos++;
 		// printToken(token);
-		// return NewNode((void *)token, stmt(), node);
-		return NewNode((void *)token, NULL, node);
+		return NewNode((void *)token, stmt(), node);
 	}
 
 	// printf("syntax error : Unknown syntax.\n");
@@ -532,25 +409,24 @@ struct Node *stmt() {
 	return NULL;
 }
 
-// struct Node *program() {
-// 	struct Node *child;
-// 	struct Node *parent;
+struct Node *program() {
+	struct Node *child;
+	struct Node *parent;
 
-// 	child = stmt(); // A
-// 	while (pos < tokensLength) {
-// 		parent = stmt(); // B
-// 		parent->left = child; // B->left = A
-// 		child = parent; // A = B
-// 	}
-// 	return child;
-// }
+	child = stmt(); // A
+	while (pos < tokensLength) {
+		parent = stmt(); // B
+		parent->left = child; // B->left = A
+		child = parent; // A = B
+	}
+	return child;
+}
 
 int isExpr(struct Node *node) {
 	enum TokenType type = getToken(node)->type;
 	if (type == ADD_OPE || type == SUB_OPE
 			|| type == MUL_OPE || type == DIV_OPE
-			|| type == NUM || type == OPE_EQUAL
-			|| type == IDENT) {
+			|| type == NUM) {
 		return 1;
 	}
 	return 0;
@@ -560,15 +436,6 @@ int execute(struct Node *node) {
 	int ret = 1;
 
 	if (getToken(node)->type == END) {
-		if (getToken(node->right)->type == TYPE) {
-			node = node->right;
-			// printf("%s\n", getToken(node)->data);
-			if (strcmp(getToken(node)->data, "int") == 0) {
-				// printf("%s\n", getToken(node->right)->data);
-				putMap(getToken(node->right)->data, (void *)0);
-			}
-			return 0;
-		}
 		if (node->left != NULL) {
 			execute(node->left);
 		}
@@ -576,11 +443,6 @@ int execute(struct Node *node) {
 		if (node->right != NULL) {
 			execute(node->right);
 		}
-	}
-
-	if (getToken(node)->type == OPE_EQUAL) {
-		// printf("execute_OPE_EQUAL\n");
-		calc(node);
 	}
 
 	// ELSE_IF_THEN
@@ -610,10 +472,9 @@ int execute(struct Node *node) {
 
 	if (getToken(node)->type == PRINT) {
 		// printf("print\n");
-		// printToken(getToken(node->right));
-		if (isExpr(node->right)) {
-			// printf("calc_PRINT %d\n", *(int *)getMap("abc"));
-			ret = calc(node->right);
+		// printToken(getToken(node->right->left));
+		if (isExpr(node->left)) {
+			ret = calc(node->left);
 			printf("%d\n", ret);
 		}
 	}
@@ -670,9 +531,6 @@ int main(int argv, char *args[]) {
 
 	pos = 0;
 
-	map = (struct Map *)malloc(sizeof(struct Map));
-	map->size = 0;
-
 	// expr();
 
 	// printf("%d\n", ((struct Token *)e->left->data)->type);
@@ -692,23 +550,11 @@ int main(int argv, char *args[]) {
 	// 	i++;
 	// }
 
-	while (pos < tokensLength) {
-		node = stmt();
-		// node = program();
-		// printf("%d\n", calc(node->right->left));
-		// printf("%d\n", calc(node->left->right->left));
-		// printf("execute_node\n");
-		execute(node);
-		// printToken(getToken(node));
-	}
-
-	// putMap("x", (void *)1);
-
-	// if (getMap("abc") != NULL) {
-	// 	printf("main_getMap = %d\n", *(int *)getMap("abc"));
-	// }
-
-	// printf("hogehoge\n");
+	node = program();
+	// printf("%d\n", calc(node->right->left));
+	// printf("%d\n", calc(node->left->right->left));
+	execute(node);
+	// printToken(getToken(node));
 
 	fclose(fp);
 	

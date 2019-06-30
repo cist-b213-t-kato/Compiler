@@ -1,9 +1,18 @@
-print 7;
-print 3 * 4 * 5;
-print 22 / 7;
+// print 7;
+// print 3 * 4 * 5;
+// print 22 / 7;
+// 
 
-if (1)
+int abc;
+
+abc = 0;
+
+print 12345678;
+print abc;
+
+if (abc)
  	print 777;
 else
  	print 37564;
+
 print 12345679 * 80 + 1;
