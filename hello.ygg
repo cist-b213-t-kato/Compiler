@@ -1,18 +1,25 @@
-// print 7;
-// print 3 * 4 * 5;
-// print 22 / 7;
-// 
+// printInt 7;
+// printInt 3 * 4 * 5;
+// printInt 22 / 7;
 
 int abc;
 
 abc = 0;
 
-print 12345678;
-print abc;
+abc = abc + 1;
+
+printInt 12345678;
+printString "\n"
+printInt abc;
+printString "\n";
 
 if (abc)
- 	print 777;
-else
- 	print 37564;
+ 	printInt 777;
+// else
+// 	printInt 37564;
+printString "\n";
 
-print 12345679 * 80 + 1;
+printInt 12345679 * 80 + 1;
+printString "\n";
+
+printString "hoge\n";

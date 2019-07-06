@@ -3,14 +3,17 @@
 #include <string.h>
 #include <ctype.h>
 
-enum TokenType {
+#define LINE_MAX 256
+
+enum Type {
 	NUM,
+	STRING,
 	ADD_OPE,
 	SUB_OPE,
 	MUL_OPE,
 	DIV_OPE,
 	OPE_EQUAL,
-	TYPE,
+	VAR_TYPE,
 	IF,
 	ELSE,
 	IDENT,
@@ -18,12 +21,13 @@ enum TokenType {
 	BRACKET_END,
 	BLOCK_START,
 	BLOCK_END,
-	PRINT,
+	PRINT_INT,
+	PRINT_STRING,
 	END
 };
 
 struct Token {
-	enum TokenType type;
+	enum Type type;
 	void* data;
 };
 
@@ -31,6 +35,11 @@ struct Node {
 	void *data;
 	struct Node *left;
 	struct Node *right;
+};
+
+struct Value {
+	enum Type type;
+	void *data;
 };
 
 struct Map {
@@ -45,8 +54,7 @@ int pos;
 
 struct Map *map;
 
-
-struct Node *expr();
+struct Node *ParseExpression();
 
 void putMap(char *key, void *value) {
 	int i;
@@ -72,7 +80,7 @@ void *getMap(char *key) {
 	return NULL;
 }
 
-struct Token *NewToken(enum TokenType type, void* data) {
+struct Token *NewToken(enum Type type, void* data) {
 	struct Token *tokenTmp;
 	tokenTmp = (struct Token *)malloc(sizeof(struct Token));
 	tokenTmp->type = type;
@@ -80,131 +88,180 @@ struct Token *NewToken(enum TokenType type, void* data) {
 	return tokenTmp;
 }
 
-void tokenize(char *sArg) {
-	tokensLength = 0;
-	char *s;
-	char *buf;
+void SkipComment(char **ps) {
+	if (strncmp(*ps, "//", 2) == 0) {
+		while (**ps != '\0' && **ps != '\n') {
+			*ps += 1;
+		}
+	} else if (strncmp(*ps, "/*", 2) == 0) {
+		while (strncmp(*ps, "*/", 2) == 0) {
+			if (**ps != '\0') {
+				printf("ERROR\n");
+				exit(-1);
+			}
+			*ps += 1;
+		}
+	}
+}
+
+struct Token *MakeToken(char **ps) {
 	int i;
+	char *sData;
+	char sBuf[256];
 
-	s = sArg;
+	// printf("%c", **ps);
+
+	if (isspace(**ps)) {
+		*ps += 1;
+		return NULL;
+	}
+
+	if (isdigit(**ps)) {
+		// tokens[tokensLength] = NewToken(NUM, (void *)malloc(sizeof(int)));
+		// *(int *)(tokens[tokensLength]->data) = strtol(s, &s, 10);
+		return NewToken(NUM, (void *)strtol(*ps, ps, 10));
+	}
+
+	if (strncmp(*ps, "if", 2) == 0) {
+		if (!isalnum(*( *ps + 2 ))) {
+			*ps += 2;
+			return NewToken(IF, NULL);
+		}
+	}
+
+	if (strncmp(*ps, "else", 4) == 0) {
+		if (!isalnum(*( *ps + 4 ))) {
+			*ps += 4;
+			return NewToken(ELSE, NULL);
+		}
+	}
+
+	if (strncmp(*ps, "printInt", 8) == 0) {
+		if (!isalnum(*( *ps + 8 ))) {
+			*ps += 8;
+			return NewToken(PRINT_INT, NULL);
+		}
+	}
+
+	if (strncmp(*ps, "printString", 11) == 0) {
+		if (!isalnum(*( *ps + 11 ))) {
+			*ps += 11;
+			return NewToken(PRINT_STRING, NULL);
+		}
+	}
+
+	if (strncmp(*ps, "int", 3) == 0) {
+		if (!isalnum(*( *ps + 3 ))) {
+			*ps += 3;
+			return NewToken(VAR_TYPE, "int");
+		}
+	}
+
+	if (strncmp(*ps, "char*", 5) == 0) {
+		if (!isalnum(*( *ps + 5 ))) {
+			*ps += 5;
+			return NewToken(VAR_TYPE, "char*");
+		}
+	}
+
+	// 識別子
+	if (isalpha(**ps)) {
+		i = 1;
+		while (isalnum(*(*ps + i))) {
+			i++;
+		}
+		sData = (char *)malloc(sizeof(char) * i);
+		strncpy(sData, *ps, i);
+		*ps += i;
+		return NewToken(IDENT, (void *)sData);
+	}
+
+	if (**ps == '"') {
+		*ps += 1;
+		i = 0;
+		while (**ps != '"') {
+			if (strncmp(*ps, "\\n", 2) == 0) {
+				sBuf[i] = '\n';
+				*ps += 2;
+			} else {
+				sBuf[i] = **ps;
+				*ps += 1;
+			}
+			i++;
+		}
+		*ps += 1;
+		sBuf[i] = '\0';
+		sData = (char *)malloc(sizeof(char) * (i + 1));
+		strncpy(sData, sBuf, i);
+		return NewToken(STRING, (void *)sData);
+	}
+
+	if (**ps == '{') {
+		*ps += 1;
+		return NewToken(BLOCK_START, NULL);
+	}
+
+	if (**ps == '}') {
+		*ps += 1;
+		return NewToken(BLOCK_END, NULL);
+	}
+
+	if (**ps == '(') {
+		*ps += 1;
+		return NewToken(BRACKET_START, NULL);
+	}
+
+	if (**ps == ')') {
+		*ps += 1;
+		return NewToken(BRACKET_END, NULL);
+	}
+
+	if (**ps == '=') {
+		*ps += 1;
+		return NewToken(OPE_EQUAL, NULL);
+	}
+
+	if (**ps == '+') {
+		*ps += 1;
+		return NewToken(ADD_OPE, NULL);
+	}
+
+	if (**ps == '-') {
+		*ps += 1;
+		return NewToken(SUB_OPE, NULL);
+	}
+
+	if (**ps == '*') {
+		*ps += 1;
+		return NewToken(MUL_OPE, NULL);
+	}
+
+	if (**ps == '/') {
+		*ps += 1;
+		return NewToken(DIV_OPE, NULL);
+	}
+
+	if (**ps == ';') {
+		*ps += 1;
+		return NewToken(END, NULL);
+	}
+
+	printf("不正な文字列です。");
+	exit(-1);
+}
+
+void tokenize(char *s) {
+	tokensLength = 0;
+	struct Token *pkToken;
+
+	// printf("%s\n", s);
 	while (*s != '\0') {
-		if (isdigit(*s)) {
-			tokens[tokensLength] = NewToken(NUM, (void *)malloc(sizeof(int)));
-			*(int *)(tokens[tokensLength]->data) = strtol(s, &s, 10);
-			tokensLength++;
-			continue;
-		}
+		SkipComment(&s);
 
-		if (strncmp(s, "if", 2) == 0) {
-			if (!isalnum(*( s + 2 ))) {
-				tokens[tokensLength] = NewToken(IF, NULL);
-				tokensLength++;
-				s += 2;
-				continue;
-			}
+		pkToken = MakeToken(&s);
+		if (pkToken != NULL) {
+			tokens[tokensLength++] = pkToken;
 		}
-
-		if (strncmp(s, "else", 4) == 0) {
-			if (!isalnum(*( s + 4 ))) {
-				tokens[tokensLength] = NewToken(ELSE, NULL);
-				tokensLength++;
-				s += 4;
-				continue;
-			}
-		}
-
-		if (strncmp(s, "print", 5) == 0) {
-			if (!isalnum(*( s + 5 ))) {
-				tokens[tokensLength] = NewToken(PRINT, NULL);
-				tokensLength++;
-				s += 5;
-				continue;
-			}
-		}
-
-		if (strncmp(s, "int", 3) == 0) {
-			if (!isalnum(*( s + 3 ))) {
-				tokens[tokensLength] = NewToken(TYPE, "int");
-				tokensLength++;
-				s += 3;
-				continue;
-			}
-		}
-
-		if (strncmp(s, "char*", 5) == 0) {
-			if (!isalnum(*( s + 5 ))) {
-				tokens[tokensLength] = NewToken(TYPE, "char*");
-				tokensLength++;
-				s += 5;
-				continue;
-			}
-		}
-
-		// 識別子
-		if (isalpha(*s)) {
-			i = 1;
-			while (isalnum(*(s + i))) {
-				i++;
-			}
-			buf = (char *)malloc(sizeof(char) * i);
-			strncpy(buf, s, i);
-			tokens[tokensLength] = NewToken(IDENT, (void *)buf);
-			tokensLength++;
-			s += i;
-			continue;
-		}
-
-		if (*s == '{') {
-			tokens[tokensLength] = NewToken(BLOCK_START, NULL);
-			tokensLength++;
-		}
-
-		if (*s == '}') {
-			tokens[tokensLength] = NewToken(BLOCK_END, NULL);
-			tokensLength++;
-		}
-
-		if (*s == '(') {
-			tokens[tokensLength] = NewToken(BRACKET_START, NULL);
-			tokensLength++;
-		}
-
-		if (*s == ')') {
-			tokens[tokensLength] = NewToken(BRACKET_END, NULL);
-			tokensLength++;
-		}
-
-		if (*s == '=') {
-			tokens[tokensLength] = NewToken(OPE_EQUAL, NULL);
-			tokensLength++;
-		}
-
-		if (*s == '+') {
-			tokens[tokensLength] = NewToken(ADD_OPE, NULL);
-			tokensLength++;
-		}
-
-		if (*s == '-') {
-			tokens[tokensLength] = NewToken(SUB_OPE, NULL);
-			tokensLength++;
-		}
-
-		if (*s == '*') {
-			tokens[tokensLength] = NewToken(MUL_OPE, NULL);
-			tokensLength++;
-		}
-
-		if (*s == '/') {
-			tokens[tokensLength] = NewToken(DIV_OPE, NULL);
-			tokensLength++;
-		}
-
-		if (*s == ';') {
-			tokens[tokensLength] = NewToken(END, NULL);
-			tokensLength++;
-		}
-
-		s++;
 	}
 }
 
@@ -222,13 +279,14 @@ struct Token *getToken(struct Node *node) {
 }
 
 void printToken(struct Token *token) {
-	printf("printToken: ");
-	if (token->type == NUM) printf("NUM : %d", *(int *)(token->data));
+	if (token->type == NUM) printf("NUM : %ld", (long)token->data);
+	if (token->type == STRING) printf("STRING : %s", token->data);
 	if (token->type == ADD_OPE) printf("ADD_OPE");
 	if (token->type == SUB_OPE) printf("SUB_OPE");
 	if (token->type == MUL_OPE) printf("MUL_OPE");
 	if (token->type == DIV_OPE) printf("DIV_OPE");
 	if (token->type == OPE_EQUAL) printf("OPE_EQUAL");
+	if (token->type == VAR_TYPE) printf("VAR_TYPE : %s", token->data);
 	if (token->type == IDENT) printf("IDENT : %s", (char *)token->data);
 	if (token->type == IF) printf("IF");
 	if (token->type == ELSE) printf("ELSE");
@@ -236,179 +294,219 @@ void printToken(struct Token *token) {
 	if (token->type == BRACKET_END) printf(")");
 	if (token->type == BLOCK_START) printf("{");
 	if (token->type == BLOCK_END) printf("}");
-	if (token->type == PRINT) printf("PRINT");
+	if (token->type == PRINT_INT) printf("PRINT_INT");
+	if (token->type == PRINT_STRING) printf("PRINT_STRING");
 	if (token->type == END) printf(";");
 	printf("\n");
 }
 
 void printTokens() {
 	int i;
+	printf("[print tokens]\n");
 	for (i = 0; i < tokensLength; i++) {
 		printf("%2d: ", i);
 		printToken(tokens[i]);
 	}
 }
 
-int consume(enum TokenType type) {
+struct Token *Consume(enum Type type) {
 	// pos < tokensLength なくてもイケる？
 	if (pos < tokensLength && tokens[pos]->type == type) {
-		return 1;
+		return tokens[pos++];
 	}
-	return 0;
+	return NULL;
 }
 
-struct Node *term() {
+struct Node *ParseFactor() {
 	struct Token *token;
 	struct Node *node;
-	
 
-	if (consume(NUM)) {
-		token = tokens[pos];
-		pos++;
+	if ((token = Consume(PRINT_INT)) != NULL) {
+		return NewNode((void *)token, NULL, ParseExpression());
+	} else if ((token = Consume(PRINT_STRING)) != NULL) {
+		return NewNode((void *)token, NULL, ParseExpression());
+	} else if ((token = Consume(NUM)) != NULL) {
 		return NewNode((void *)token, NULL, NULL);
-	} else if (consume(IDENT)) {
-		// printf("%s\n", "term_IDENT");
-		token = tokens[pos];
-		pos++;
+	} else if ((token = Consume(STRING)) != NULL) {
+		return NewNode((void *)token, NULL, NULL);
+	} else if ((token = Consume(IDENT)) != NULL) {
+		// printf("%s\n", "ParseFactor_IDENT");
 		node = NewNode((void *)token, NULL, NULL);
-		if (consume(OPE_EQUAL)) {
-			// printf("%s\n", "term_OPE_EQUAL");
-			token = tokens[pos];
-			pos++;
-			node = NewNode((void *)token, node, expr());
+		if ((token = Consume(OPE_EQUAL)) != NULL) {
+			// printf("%s\n", "ParseFactor_OPE_EQUAL");
+			node = NewNode((void *)token, node, ParseExpression());
 		}
 		return node;
 	} else {
 		// printf("hoge\n");
 		// printf("%d\n", token == NULL);
 		// printToken(token);
-		// printf("syntax error : not term.\n");
+		// printf("syntax error : not ParseFactor.\n");
 		return NULL;
 	}
 }
 
-struct Node *mul() {
-	struct Node *node = term();
+struct Node *ParseTerm() {
+	struct Node *node;
 	struct Token *token;
+
+	node = ParseFactor();
 
 	// printToken(getToken(node));
 
 	while (1) {
-		if (consume(MUL_OPE) || consume(DIV_OPE)) {
-			token = tokens[pos];
-			// printToken(token);
-			pos++;
-			node = NewNode((void *)token, node, term());
+		if ((token = Consume(MUL_OPE)) != NULL || (token = Consume(DIV_OPE)) != NULL) {
+			node = NewNode((void *)token, node, ParseFactor());
 		} else {
 			return node;
 		}
 	}
 }
 
-struct Node *expr() {
+struct Node *ParseExpression() {
 	struct Node *node;
 	struct Token *token;
 
-	if (consume(PRINT)) {
-		token = tokens[pos];
-		pos++;
-		return NewNode((void *)token, NULL, expr());
-	}
-
-	node = mul();
+	node = ParseTerm();
 
 	while (1) {
-		if (consume(ADD_OPE) || consume(SUB_OPE)) {
-			token = tokens[pos];
-			pos++;
-			node = NewNode((void *)token, node, mul());
+		if ((token = Consume(ADD_OPE)) != NULL || (token = Consume(SUB_OPE)) != NULL) {
+			node = NewNode((void *)token, node, ParseTerm());
 		} else {
 			return node;
 		}
 	}
 }
 
-int calc(struct Node *node) {
-	enum TokenType type = ((struct Token *)node->data)->type;
-	int lResult;
-	int rResult;
-	if (type == NUM) {
+struct Value calc(struct Node *node) {
+	enum Type type = ((struct Token *)node->data)->type;
+	struct Value ret;
+	struct Value value;
+	struct Value *pRet;
+	struct Value lResult;
+	struct Value rResult;
+
+	if (getToken(node)->type == END) {
+		if (node->left != NULL) {
+			// execute(node->left);
+			calc(node->left);
+		}
+
+		if (node->right != NULL) {
+			// execute(node->right);
+			calc(node->right);
+		}
+		return ret;
+	} else if (getToken(node)->type == VAR_TYPE) {
+		// printf("%s\n", getToken(node)->data);
+		if (strcmp(getToken(node)->data, "int") == 0) {
+			// printf("%s\n", getToken(node->right)->data);
+			putMap(getToken(node)->data, (void *)0);
+		}
+		return ret;
+	} else if (getToken(node)->type == ELSE) {
+		// ELSE_IF_THEN
+		if (getToken(node->left)->type == IF) {
+			ret = calc(node->left);
+		}
+		if (!ret.data && (node->right != NULL)) {
+			calc(node->right);
+		}
+		return ret;
+	} else if (getToken(node)->type == IF) {
+		// IF_THEN
+		// printf("IF\n");
+		// printToken(getToken(node->left));
+		// if (isExpr(node->left)) {
+		ret = calc(node->left);
+		// printf("%d\n", value.data);
+		// }
+		if (ret.data && (node->right != NULL)) {
+			calc(node->right);
+		}
+		return ret;
+	} else if (type == NUM) {
 		// return *(int *)((struct Token *)node->data)->data;
-		return *(int *)getToken(node)->data;
+		ret.type = NUM;
+		ret.data = getToken(node)->data;
+		return ret;
+	} else if (type == STRING) {
+		// return *(int *)((struct Token *)node->data)->data;
+		ret.type = STRING;
+		// printf("piyo");
+		// printf("%s\n", getToken(node)->data);
+		ret.data = getToken(node)->data;
+		return ret;
 	} else if (type == OPE_EQUAL) {
+		pRet = (struct Value *)malloc(sizeof(struct Value));
+		pRet->type = calc(node->right).type;
+		pRet->data = calc(node->right).data;
 		// printf("calc_OPE_EQUAL %s %d\n",
 		// 	getToken(node->left)->data, *(int *)getToken(node->right)->data);
-		putMap(getToken(node->left)->data, getToken(node->right)->data);
-		return *(int *)getToken(node->right)->data;
+		putMap(getToken(node->left)->data, pRet);
+		return *pRet;
 	} else if (type == IDENT) {
 		// printf("calc_IDENT ");
 		// printf("%s ", (char *)getToken(node)->data);
 		// printf("%d\n", *(int *)getMap((char *)getToken(node)->data));
 		// printf("%d\n", getMap("abc"));
 		// return 1000;
-		return *(int *)getMap((char *)getToken(node)->data);
+		ret.type = ((struct Value *)getMap((char *)getToken(node)->data))->type;
+		ret.data = ((struct Value *)getMap((char *)getToken(node)->data))->data;
+		return ret;
+	} else if (type == PRINT_INT) {
+		// printf("print\n");
+		// printToken(getToken(node->right));
+			// printf("calc_PRINT %d\n", *(int *)getMap("abc"));
+		value = calc(node->right);
+		printf("%ld", (long)value.data);
+		return ret;
+	} else if (type == PRINT_STRING) {
+		// printf("print\n");
+		// printToken(getToken(node->right));
+			// printf("calc_PRINT %d\n", *(int *)getMap("abc"));
+		value = calc(node->right);
+		printf("%s", (char *)value.data);
+		return ret;
 	} else {
-		// if (type == PRINT) {
-		// 	ret = calc(node->right);
-		// 	if (getToken(ret)->type == NUM) {
-		// 		printf("%d", *(int *)getToken(ret)->data);
-		// 	}
-		// 	// printf("hogehogehoge\n");
-		// 	return NULL;
-		// }
 		lResult = calc(node->left);
 		rResult = calc(node->right);
+		ret.type = NUM;
 		if (type == ADD_OPE) {
-			return lResult + rResult;
+			ret.data = (void *)((long)lResult.data + (long)rResult.data);
 		} else if (type == SUB_OPE) {
-			return lResult - rResult;
+			ret.data = (void *)((long)lResult.data - (long)rResult.data);
 		} else if (type == MUL_OPE) {
-			return lResult * rResult;
+			ret.data = (void *)((long)lResult.data * (long)rResult.data);
 		} else if (type == DIV_OPE) {
-			return lResult / rResult;
-		} else {
-			return 0;
+			ret.data = (void *)((long)lResult.data / (long)rResult.data);
 		}
-	}
-}
-
-void skipBlock() {
-	if (!consume(BLOCK_START)) {
-		return;
+		return ret;
 	}
 
-	while (!consume(BLOCK_END)) {
-		if (consume(BLOCK_START)) {
-			skipBlock();
-		}
-		pos++;
-	}
-	pos++;
+	printf("不正なノード\n");
+	// printToken(getToken(node));
+	return ret;
 }
+
+// void skipBlock() {
+// 	if (!consume(BLOCK_START)) {
+// 		return;
+// 	}
+
+// 	while (!consume(BLOCK_END)) {
+// 		if (consume(BLOCK_START)) {
+// 			skipBlock();
+// 		}
+// 		pos++;
+// 	}
+// 	pos++;
+// }
 
 struct Node *stmt() {
 	struct Node *node;
 	struct Token *token;
 	// struct Node *ret;
-
-	if (consume(PRINT)) {
-		token = tokens[pos];
-		pos++;
-		// ret = calc(expr());
-		// if (((struct Token *)ret->data)->type == NUM) {
-		// 	printf("NUM : %d\n", *(int *)((struct Token *)ret->data)->data);
-		// }
-		node = NewNode((void *)token, NULL, expr());
-		// return NULL;
-		if (consume(END)) {
-			token = tokens[pos];
-			pos++;
-			// printToken(token);
-			return NewNode((void *)token, NULL, node);
-		} else {
-			printf("許されざる\n");
-		}
-	}
 
 	// if (consume(BLOCK_START)) {
 	// 	pos++;
@@ -432,7 +530,7 @@ struct Node *stmt() {
 	// 	}
 
 	// 	pos++;
-	// 	node = expr();
+	// 	node = ParseExpression();
 
 	// 	if (consume(BRACKET_END)) {
 	// 		pos++;
@@ -465,28 +563,23 @@ struct Node *stmt() {
 	// }
 
 	// IF
-	if (consume(IF)) {
-		token = tokens[pos];
-		pos++;
-
-		if (!consume(BRACKET_START)) {
+	if ((token = Consume(IF)) != NULL) {
+		// printf("IF\n");
+		if (Consume(BRACKET_START) == NULL) {
 			printf("syntax error : Write '(' after if.\n");
 			exit(-1);
 		}
-		pos++;
-		node = expr();
 
-		if (!consume(BRACKET_END)) {
-			printf("syntax error : Write ')' after expr.\n");
+		node = ParseExpression();
+
+		if (Consume(BRACKET_END) == NULL) {
+			printf("syntax error : Write ')' after ParseExpression.\n");
 			exit(-1);
 		}
-		pos++;
 
 		node = NewNode((void *)token, node, stmt());
 
-		if (consume(ELSE)) {
-			token = tokens[pos];
-			pos++;
+		if ((token = Consume(ELSE)) != NULL) {
 			node = NewNode((void *)token, node, stmt());
 		}
 
@@ -499,32 +592,30 @@ struct Node *stmt() {
 	}
 
 	// 型宣言
-	if (consume(TYPE)) {
-		token = tokens[pos];
-		pos++;
+	if ((token = Consume(VAR_TYPE)) != NULL) {
 		node = NewNode((void *)token, NULL, NULL);
-		if(consume(IDENT)) {
-			token = tokens[pos];
-			pos++;
+		if((token = Consume(IDENT)) != NULL) {
 			node->right = NewNode((void *)token, NULL, NULL);
 		}
 
-		if (consume(END)) {
-			token = tokens[pos];
-			pos++;
+		if ((token = Consume(END)) != NULL) {
 			// printToken(token);
 			return NewNode((void *)token, NULL, node);
+		} else {
+			printf("セミコロンが抜けています\n");
+			exit(-1);
 		}
 	}
 
-	node = expr();
+	node = ParseExpression();
 
-	if (consume(END)) {
-		token = tokens[pos];
-		pos++;
+	if ((token = Consume(END)) != NULL) {
 		// printToken(token);
 		// return NewNode((void *)token, stmt(), node);
 		return NewNode((void *)token, NULL, node);
+	} else {
+		printf("セミコロンが抜けています\n");
+		exit(-1);
 	}
 
 	// printf("syntax error : Unknown syntax.\n");
@@ -545,135 +636,69 @@ struct Node *stmt() {
 // 	return child;
 // }
 
-int isExpr(struct Node *node) {
-	enum TokenType type = getToken(node)->type;
-	if (type == ADD_OPE || type == SUB_OPE
-			|| type == MUL_OPE || type == DIV_OPE
-			|| type == NUM || type == OPE_EQUAL
-			|| type == IDENT) {
-		return 1;
+// int isExpr(struct Node *node) {
+// 	enum Type type = getToken(node)->type;
+// 	if (type == ADD_OPE || type == SUB_OPE
+// 			|| type == MUL_OPE || type == DIV_OPE
+// 			|| type == NUM || type == OPE_EQUAL
+// 			|| type == IDENT) {
+// 		return 1;
+// 	}
+// 	return 0;
+// }
+
+int ReadSource(FILE *fp, char *s) {
+	int iSize;
+	char sLine[256];
+
+	iSize = 0;
+	// while (fscanf(fp, "%s\n", sLine[iSize]) != EOF) {
+	// while (fscanf(fp, "%s", sLine[iSize]) != EOF) {
+	// TODO これはひどい
+	while (fgets(sLine, 256, fp) != NULL) {
+		strcat(s, sLine);
+		iSize++;
 	}
+
+	fclose(fp);
+
 	return 0;
 }
 
-int execute(struct Node *node) {
-	int ret = 1;
-
-	if (getToken(node)->type == END) {
-		if (getToken(node->right)->type == TYPE) {
-			node = node->right;
-			// printf("%s\n", getToken(node)->data);
-			if (strcmp(getToken(node)->data, "int") == 0) {
-				// printf("%s\n", getToken(node->right)->data);
-				putMap(getToken(node->right)->data, (void *)0);
-			}
-			return 0;
-		}
-		if (node->left != NULL) {
-			execute(node->left);
-		}
-
-		if (node->right != NULL) {
-			execute(node->right);
-		}
-	}
-
-	if (getToken(node)->type == OPE_EQUAL) {
-		// printf("execute_OPE_EQUAL\n");
-		calc(node);
-	}
-
-	// ELSE_IF_THEN
-	if (getToken(node)->type == ELSE) {
-		if (getToken(node->left)->type == IF) {
-			ret = execute(node->left);
-		}
-		if (!ret && (node->right != NULL)) {
-			execute(node->right);
-		}
-		return !ret;
-	}
-
-	// IF_THEN
-	if (getToken(node)->type == IF) {
-		// printf("IF\n");
-		// printToken(getToken(node->left));
-		if (isExpr(node->left)) {
-			// printf("isExpr\n");
-			ret = calc(node->left);
-		}
-		if (ret && (node->right != NULL)) {
-			execute(node->right);
-		}	
-		return ret;
-	}
-
-	if (getToken(node)->type == PRINT) {
-		// printf("print\n");
-		// printToken(getToken(node->right));
-		if (isExpr(node->right)) {
-			// printf("calc_PRINT %d\n", *(int *)getMap("abc"));
-			ret = calc(node->right);
-			printf("%d\n", ret);
-		}
-	}
-
-	return 1;
-}
-
 int main(int argv, char *args[]) {
-	FILE *fp;
-	char *fname;
-	char psBuf[256][256];
-	char s[4096];
-	int iSize;
-	int i;
+	char *s;
 	struct Node *node;
+	FILE *fp;
 
 	if (argv != 2) {
 		printf("Illegal argument error.\n");
 		exit(1);
 	}
 
-	fname = args[1];
+	s = (char *)malloc(sizeof(char) * 4096);
 
-	fp = fopen(fname, "r");
+	fp = fopen(args[1], "r");
 	if (fp == NULL) {
 		return -1;
 	}
-
-	iSize = 0;
-	// while (fscanf(fp, "%s\n", psBuf[iSize]) != EOF) {
-	// while (fscanf(fp, "%s", psBuf[iSize]) != EOF) {
-	// TODO これはひどい
-	while (fgets(psBuf[iSize], 256, fp) != NULL) {
-		for (i = 0; i < 256 - 2; i++) { 
-			if (strncmp(psBuf[iSize] + i, "//", 2) == 0) {
-				strcpy(psBuf[iSize] + i, "");
-				break;
-			}
-		}
-		iSize++;
-	}
-
-	for (i = 0; i < iSize; i++) {
-		strcat(s, psBuf[i]);
-		strcat(s, " ");
+	
+	if (ReadSource(fp, s) == -1) {
+		exit(-1);
 	}
 
 	// printf("%s\n", s);
 
 	tokenize(s);
 
-	// printTokens();
-	// printf("----------\n");
+	printTokens();
+	printf("----------\n");
 
 	pos = 0;
 
 	map = (struct Map *)malloc(sizeof(struct Map));
 	map->size = 0;
 
-	// expr();
+	// ParseExpression();
 
 	// printf("%d\n", ((struct Token *)e->left->data)->type);
 	// printf("%d\n", *(int *)((struct Token *)e->left->data)->data);
@@ -698,8 +723,8 @@ int main(int argv, char *args[]) {
 		// printf("%d\n", calc(node->right->left));
 		// printf("%d\n", calc(node->left->right->left));
 		// printf("execute_node\n");
-		execute(node);
 		// printToken(getToken(node));
+		calc(node);
 	}
 
 	// putMap("x", (void *)1);
@@ -709,8 +734,6 @@ int main(int argv, char *args[]) {
 	// }
 
 	// printf("hogehoge\n");
-
-	fclose(fp);
 	
 	return 0;
 }
