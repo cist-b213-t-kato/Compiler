@@ -4,3 +4,5 @@ num = num + 1;
 printString "num + 1 = ";
 printInt num;
 printString "\n";
+
+printInt 1 + 2 +;

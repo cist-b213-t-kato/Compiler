@@ -1,0 +1,11 @@
+printString "ブロックコメントを閉じないテスト\n";
+
+/*
+
+printString "正しいブロックコメント\n";
+
+*/
+
+/*
+
+printString "誤ったブロックコメント\n";
